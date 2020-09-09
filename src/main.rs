@@ -1,58 +1,26 @@
 use clap::{crate_authors, crate_description, crate_name, crate_version, Arg};
-use glium::{program, texture, uniform};
-use image::DynamicImage;
+use glium::{program, uniform};
 use std::path::Path;
 
-// TODO: Add a verbosity variable
-macro_rules! log_verbose {
-    () => (std::eprint!("\n"));
-    ($($args:tt)*) => ({
-        eprintln!("[INFO]: {}", format_args!($($args)*));
-    })
-}
-
-fn load_image_from_path<P>(fp: P) -> Option<DynamicImage>
-where
-    P: AsRef<Path>,
-{
-    log_verbose!("Loading image file...");
-    let fp = fp.as_ref();
-    let di = image::open(&fp);
-    if let Some(e) = di.as_ref().err() {
-        eprintln!(
-            "Failed to open image \"{}\": {}...",
-            fp.to_str().unwrap_or("null"),
-            e
-        );
-    }
-    di.ok()
-}
-
-fn construct_texture_from_imagefile<F, P>(display: &F, fp: P) -> Option<texture::SrgbTexture2d>
-where
-    F: glium::backend::Facade,
-    P: AsRef<Path>,
-{
-    if let Some(image) = load_image_from_path(fp) {
-        use image::GenericImageView;
-        log_verbose!("Creating texture...");
-
-        let raw_image_data: Vec<u8> = image.to_rgba().to_vec();
-        let raw_image_data = texture::RawImage2d::from_raw_rgba(raw_image_data, image.dimensions());
-        let texture = texture::SrgbTexture2d::new(display, raw_image_data);
-        return texture.ok();
-    }
-    None
-}
+#[macro_use]
+mod log;
+mod texture;
 
 fn main() {
     use glutin::{dpi, event_loop, window, Api, ContextBuilder, GlRequest};
 
-    eprintln!(
-        "WARNING: This application is currently considered in early-alpha and non-functional"
-    );
+    let st = std::time::Instant::now();
+    macro_rules! log_verbose_t {
+        ($($args:tt)*) => ({
+            log_verbose!("{}: {}", st.elapsed().as_secs_f32(), format_args!($($args)*));
+        })
+    }
 
-    let start_instant = std::time::Instant::now();
+    use colored::*;
+    eprintln!(
+        "{}: This application is currently considered in early-alpha and non-functional",
+        "WARNING".red()
+    );
 
     let matches = clap::app_from_crate!()
         .arg(
@@ -63,31 +31,25 @@ fn main() {
                 .index(1),
         )
         .get_matches();
-    let file_path = Path::new(matches.value_of("file").unwrap());
 
-    log_verbose!(
-        "Creating EventLoop: {}",
-        start_instant.elapsed().as_secs_f32()
-    );
+    let file_path = Path::new(matches.value_of("file").unwrap()).to_owned();
+
+    log_verbose_t!("Loading image file(s)");
+    let load_image_thread = std::thread::spawn(move || texture::dynamic_image_from_path(file_path));
+
+    log_verbose_t!("Creating EventLoop");
     let el = event_loop::EventLoop::new();
-    log_verbose!("Building Window: {}", start_instant.elapsed().as_secs_f32());
+    log_verbose_t!("Building Window");
     let wb = window::WindowBuilder::new()
         .with_title(crate_name!())
         .with_inner_size(dpi::LogicalSize::new(800.0, 600.0));
-    log_verbose!(
-        "Building Context: {}",
-        start_instant.elapsed().as_secs_f32()
-    );
-    let windowed_context = ContextBuilder::new()
+    log_verbose_t!("Building Context");
+    let cb = ContextBuilder::new()
         .with_gl(GlRequest::Specific(Api::OpenGl, (3, 3)))
         .with_gl_profile(glutin::GlProfile::Compatibility)
-        .build_windowed(wb, &el)
-        .unwrap();
-    log_verbose!(
-        "Initializing Display: {}",
-        start_instant.elapsed().as_secs_f32()
-    );
-    let display = glium::Display::from_gl_window(windowed_context).unwrap();
+        .with_srgb(true);
+    log_verbose_t!("Initializing Display");
+    let display = glium::Display::new(wb, cb, &el).unwrap();
 
     let vbo = {
         #[derive(Copy, Clone)]
@@ -128,46 +90,53 @@ fn main() {
     )
     .unwrap();
 
-    log_verbose!(
-        "Compiling shaders...: {}",
-        start_instant.elapsed().as_secs_f32()
-    );
+    log_verbose_t!("Compiling shaders");
     let program = program!(&display, 140 => {
         vertex: "
         #version 140
         in vec2 position;
         in vec2 texcoord;
-
-        out vec4 vColor;
         out vec2 vTexCoord;
-
+        uniform mat4 matrix;
         void main() {
-            gl_Position = vec4(position, 0.0, 1.0);
-            vColor = vec4(1.0, 1.0, 1.0, 1.0);
+            gl_Position = matrix * vec4(position, 1.0, 1.0);
             vTexCoord = texcoord;
         }
         ",
         fragment: "
         #version 140
-        in vec4 vColor;
         in vec2 vTexCoord;
-
         out vec4 f_color;
-
         uniform sampler2D image;
-
         void main() {
-            f_color = texture(image, vTexCoord) * vColor;
+            f_color = texture(image, vTexCoord);
         }
         ",
     })
     .unwrap();
 
-    let tex = construct_texture_from_imagefile(&display, &file_path).unwrap();
-    log_verbose!(
-        "Total time since app start: {}ms",
-        start_instant.elapsed().as_millis()
-    );
+    log_verbose_t!("Waiting for load_image_thread");
+    let dynamic_image = load_image_thread.join().unwrap().unwrap();
+
+    log_verbose_t!("Creating texture");
+    let tex = texture::texture_from_dynamic_image(&display, &dynamic_image).unwrap();
+
+    log_verbose_t!("Entering main loop");
+
+    let mut matrix: [[f32; 4]; 4] = [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ];
+
+    // Abstract this away
+    let apply_scale = |matrix: &mut [[f32; 4]; 4], scale: &[f32; 4]| {
+        matrix[0][0] *= scale[0];
+        matrix[1][1] *= scale[1];
+        matrix[2][2] *= scale[2];
+        matrix[3][3] *= scale[3];
+    };
 
     el.run(move |event, _target, control| {
         use glium::Surface;
@@ -177,11 +146,11 @@ fn main() {
         let draw = || {
             // build uniforms
             let sampler = tex.sampled();
-            let uniforms = uniform! { texture: sampler };
+            let uniforms = uniform! { texture: sampler, matrix: matrix};
 
             // draw a frame
             let mut frame = display.draw();
-            frame.clear(None, None, false, None, None);
+            frame.clear(None, Some((0.0, 0.0, 0.0, 1.0)), false, Some(1.0), None);
             frame
                 .draw(&vbo, &ibo, &program, &uniforms, &Default::default())
                 .unwrap();
@@ -191,15 +160,31 @@ fn main() {
         draw();
 
         match event {
-            // TODO: Window resizing
-            Event::WindowEvent { event: we, .. } => {
-                if let WindowEvent::CloseRequested = we {
-                    *control = ControlFlow::Exit;
+            Event::WindowEvent { event, .. } => match event {
+                WindowEvent::CloseRequested => *control = ControlFlow::Exit,
+                WindowEvent::Resized(size) => display.gl_window().resize(size),
+                // TODO: Create functions to handle binds
+                WindowEvent::KeyboardInput { input, .. } => {
+                    if input.state == glutin::event::ElementState::Pressed {
+                        if let Some(vk) = input.virtual_keycode {
+                            match vk {
+                                glutin::event::VirtualKeyCode::Q => *control = ControlFlow::Exit,
+                                glutin::event::VirtualKeyCode::Subtract => {
+                                    apply_scale(&mut matrix, &[0.5, 0.5, 1.0, 1.0]);
+                                },
+                                glutin::event::VirtualKeyCode::Add => {
+                                    apply_scale(&mut matrix, &[2.0, 2.0, 1.0, 1.0]);
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
                 }
-            }
-            Event::LoopDestroyed => println!("Loop destroyed"),
+                _ => {}
+            },
+            Event::LoopDestroyed => log_verbose_t!("Loop destroyed"),
             _ => {}
-        }
+        };
 
         display.swap_buffers().unwrap();
     });

@@ -15,5 +15,6 @@ version = "0.1.0-alpha"
 [dependencies]
 glutin = "0.24"
 glium = "0.27"
+colored = "2"
 clap = "2.33"
 image = "0.23"
