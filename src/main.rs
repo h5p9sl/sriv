@@ -12,7 +12,7 @@ fn main() {
     let st = std::time::Instant::now();
     macro_rules! log_verbose_t {
         ($($args:tt)*) => ({
-            log_verbose!("{}: {}", st.elapsed().as_secs_f32(), format_args!($($args)*));
+            log_verbose!("{}: {}", st.elapsed().as_secs_f32().to_string().green(), format_args!($($args)*));
         })
     }
 
@@ -26,9 +26,18 @@ fn main() {
         .arg(
             Arg::with_name("file")
                 .help("Defines the file to use")
-                .required(true)
                 .multiple(false)
-                .index(1),
+                .required(true)
+        )
+        .arg(
+            Arg::with_name("benchmark")
+                .help("Exits upon loading/initializing everything")
+                .long_help(
+                    "Exits upon loading and initializing everything needed to start displaying the image on the screen. Use this option to get how long it took to load the image, initialize OpenGL, etc.",
+                )
+                .long("benchmark")
+                .short("B")
+                .required(false),
         )
         .get_matches();
 
@@ -39,15 +48,18 @@ fn main() {
 
     log_verbose_t!("Creating EventLoop");
     let el = event_loop::EventLoop::new();
+
     log_verbose_t!("Building Window");
     let wb = window::WindowBuilder::new()
         .with_title(crate_name!())
         .with_inner_size(dpi::LogicalSize::new(800.0, 600.0));
+
     log_verbose_t!("Building Context");
     let cb = ContextBuilder::new()
         .with_gl(GlRequest::Specific(Api::OpenGl, (3, 3)))
         .with_gl_profile(glutin::GlProfile::Compatibility)
         .with_srgb(true);
+
     log_verbose_t!("Initializing Display");
     let display = glium::Display::new(wb, cb, &el).unwrap();
 
@@ -97,9 +109,9 @@ fn main() {
         in vec2 position;
         in vec2 texcoord;
         out vec2 vTexCoord;
-        uniform mat4 matrix;
+        uniform mat4 model;
         void main() {
-            gl_Position = matrix * vec4(position, 1.0, 1.0);
+            gl_Position = model * vec4(position, 0.0, 1.0);
             vTexCoord = texcoord;
         }
         ",
@@ -115,15 +127,25 @@ fn main() {
     })
     .unwrap();
 
-    log_verbose_t!("Waiting for load_image_thread");
-    let dynamic_image = load_image_thread.join().unwrap().unwrap();
+    let tex = {
+        log_verbose_t!("Waiting for load_image_thread");
+        let dynamic_image = load_image_thread.join().unwrap().unwrap();
 
-    log_verbose_t!("Creating texture");
-    let tex = texture::texture_from_dynamic_image(&display, &dynamic_image).unwrap();
+        log_verbose_t!("Creating texture");
+        texture::texture_from_dynamic_image(&display, &dynamic_image).unwrap()
+    };
 
     log_verbose_t!("Entering main loop");
+    matches.index_of("benchmark").and_then(|_| -> Option<()> {
+        eprintln!(
+            "{}: Benchmark mode is enabled - the program will exit immediately",
+            "WARNING".red()
+        );
+        println!("{}", st.elapsed().as_secs_f32());
+        std::process::exit(0);
+    });
 
-    let mut matrix: [[f32; 4]; 4] = [
+    let mut model: [[f32; 4]; 4] = [
         [1.0, 0.0, 0.0, 0.0],
         [0.0, 1.0, 0.0, 0.0],
         [0.0, 0.0, 1.0, 0.0],
@@ -131,50 +153,62 @@ fn main() {
     ];
 
     // Abstract this away
-    let apply_scale = |matrix: &mut [[f32; 4]; 4], scale: &[f32; 4]| {
+    let apply_scale = |matrix: &mut [[f32; 4]; 4], scale: &[f32; 2]| {
         matrix[0][0] *= scale[0];
         matrix[1][1] *= scale[1];
-        matrix[2][2] *= scale[2];
-        matrix[3][3] *= scale[3];
+    };
+    // FIXME
+    let apply_move = |matrix: &mut [[f32; 4]; 4], trans: &[f32; 2]| {
+        matrix[0][3] += trans[0];
+        matrix[1][3] += trans[1];
     };
 
     el.run(move |event, _target, control| {
         use glium::Surface;
         use glutin::event::{Event, WindowEvent};
         use glutin::event_loop::ControlFlow;
+        use std::ops::Deref;
+
+        let gl_window = display.gl_window();
+        let windowed_context = gl_window.deref().deref();
 
         let draw = || {
             // build uniforms
             let sampler = tex.sampled();
-            let uniforms = uniform! { texture: sampler, matrix: matrix};
+            let uniforms = uniform! {
+                texture: sampler,
+                model: model,
+            };
 
             // draw a frame
             let mut frame = display.draw();
-            frame.clear(None, Some((0.0, 0.0, 0.0, 1.0)), false, Some(1.0), None);
+            frame.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
             frame
                 .draw(&vbo, &ibo, &program, &uniforms, &Default::default())
                 .unwrap();
             frame.finish().unwrap();
         };
 
-        draw();
-
         match event {
+            Event::RedrawRequested(_id) => draw(),
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => *control = ControlFlow::Exit,
-                WindowEvent::Resized(size) => display.gl_window().resize(size),
+                WindowEvent::Resized(size) => windowed_context.resize(size),
                 // TODO: Create functions to handle binds
                 WindowEvent::KeyboardInput { input, .. } => {
                     if input.state == glutin::event::ElementState::Pressed {
+                        // TODO: Maybe only request redraw when needed
+                        windowed_context.window().request_redraw();
                         if let Some(vk) = input.virtual_keycode {
+                            use glutin::event::VirtualKeyCode as VK;
                             match vk {
-                                glutin::event::VirtualKeyCode::Q => *control = ControlFlow::Exit,
-                                glutin::event::VirtualKeyCode::Subtract => {
-                                    apply_scale(&mut matrix, &[0.5, 0.5, 1.0, 1.0]);
-                                },
-                                glutin::event::VirtualKeyCode::Add => {
-                                    apply_scale(&mut matrix, &[2.0, 2.0, 1.0, 1.0]);
-                                },
+                                VK::Q => *control = ControlFlow::Exit,
+                                VK::J => apply_move(&mut model, &[0.0, 1.0]),
+                                VK::K => apply_move(&mut model, &[0.0, -1.0]),
+                                VK::H => apply_move(&mut model, &[1.0, 0.0]),
+                                VK::L => apply_move(&mut model, &[-1.0, 0.0]),
+                                VK::Subtract => apply_scale(&mut model, &[0.5, 0.5]),
+                                VK::Add => apply_scale(&mut model, &[2.0, 2.0]),
                                 _ => {}
                             }
                         }

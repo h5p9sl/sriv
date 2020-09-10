@@ -46,11 +46,26 @@ where
         _ => RawImageData::Rgba8(image.to_rgba().into_raw()),
     };
 
-    let raw_image_data: (Option<texture::RawImage2d::<u8>>, Option<texture::RawImage2d::<u16>>) = match raw_image_data {
-        RawImageData::Rgb8(vec) => (Some(texture::RawImage2d::from_raw_rgb(vec, image.dimensions())), None),
-        RawImageData::Rgba8(vec) => (Some(texture::RawImage2d::from_raw_rgba(vec, image.dimensions())), None),
-        RawImageData::Rgb16(vec) => (None, Some(texture::RawImage2d::from_raw_rgb(vec, image.dimensions()))),
-        RawImageData::Rgba16(vec) => (None, Some(texture::RawImage2d::from_raw_rgba(vec, image.dimensions()))),
+    let raw_image_data: (
+        Option<texture::RawImage2d<u8>>,
+        Option<texture::RawImage2d<u16>>,
+    ) = match raw_image_data {
+        RawImageData::Rgb8(vec) => (
+            Some(texture::RawImage2d::from_raw_rgb(vec, image.dimensions())),
+            None,
+        ),
+        RawImageData::Rgba8(vec) => (
+            Some(texture::RawImage2d::from_raw_rgba(vec, image.dimensions())),
+            None,
+        ),
+        RawImageData::Rgb16(vec) => (
+            None,
+            Some(texture::RawImage2d::from_raw_rgb(vec, image.dimensions())),
+        ),
+        RawImageData::Rgba16(vec) => (
+            None,
+            Some(texture::RawImage2d::from_raw_rgba(vec, image.dimensions())),
+        ),
     };
 
     if let Some(data) = raw_image_data.0 {
