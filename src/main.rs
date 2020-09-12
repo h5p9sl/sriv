@@ -1,6 +1,7 @@
 use clap::{crate_authors, crate_description, crate_name, crate_version, Arg};
 use glium::{program, uniform};
 use std::path::Path;
+use vek::mat::repr_c::column_major::mat4;
 
 #[macro_use]
 mod log;
@@ -145,23 +146,14 @@ fn main() {
         std::process::exit(0);
     });
 
-    let mut model: [[f32; 4]; 4] = [
-        [1.0, 0.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.0],
-        [0.0, 0.0, 0.0, 1.0],
-    ];
+    let matrix = mat4::Mat4::<f32>::new(
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0,
+    );
 
-    // Abstract this away
-    let apply_scale = |matrix: &mut [[f32; 4]; 4], scale: &[f32; 2]| {
-        matrix[0][0] *= scale[0];
-        matrix[1][1] *= scale[1];
-    };
-    // FIXME
-    let apply_move = |matrix: &mut [[f32; 4]; 4], trans: &[f32; 2]| {
-        matrix[0][3] += trans[0];
-        matrix[1][3] += trans[1];
-    };
+    let mut model = matrix.clone();
 
     el.run(move |event, _target, control| {
         use glium::Surface;
@@ -177,7 +169,7 @@ fn main() {
             let sampler = tex.sampled();
             let uniforms = uniform! {
                 texture: sampler,
-                model: model,
+                model: model.into_col_arrays(),
             };
 
             // draw a frame
@@ -191,6 +183,7 @@ fn main() {
 
         match event {
             Event::RedrawRequested(_id) => draw(),
+            Event::LoopDestroyed => log_verbose_t!("Loop destroyed"),
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => *control = ControlFlow::Exit,
                 WindowEvent::Resized(size) => windowed_context.resize(size),
@@ -201,14 +194,18 @@ fn main() {
                         windowed_context.window().request_redraw();
                         if let Some(vk) = input.virtual_keycode {
                             use glutin::event::VirtualKeyCode as VK;
+                            use std::f32::consts::PI as PI;
                             match vk {
                                 VK::Q => *control = ControlFlow::Exit,
-                                VK::J => apply_move(&mut model, &[0.0, 1.0]),
-                                VK::K => apply_move(&mut model, &[0.0, -1.0]),
-                                VK::H => apply_move(&mut model, &[1.0, 0.0]),
-                                VK::L => apply_move(&mut model, &[-1.0, 0.0]),
-                                VK::Subtract => apply_scale(&mut model, &[0.5, 0.5]),
-                                VK::Add => apply_scale(&mut model, &[2.0, 2.0]),
+                                VK::J => model.translate_2d([0.0, 1.0]),
+                                VK::K => model.translate_2d([0.0, -1.0]),
+                                VK::H => model.translate_2d([1.0, 0.0]),
+                                VK::L => model.translate_2d([-1.0, 0.0]),
+                                VK::Equals => model = matrix.clone(),
+                                VK::Subtract => model.scale_3d([0.5, 0.5, 1.0]),
+                                VK::Add => model.scale_3d([2.0, 2.0, 1.0]),
+                                VK::Comma => model.rotate_z(PI / 2.0),
+                                VK::Period => model.rotate_z(-PI / 2.0),
                                 _ => {}
                             }
                         }
@@ -216,7 +213,6 @@ fn main() {
                 }
                 _ => {}
             },
-            Event::LoopDestroyed => log_verbose_t!("Loop destroyed"),
             _ => {}
         };
 
