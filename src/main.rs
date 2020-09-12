@@ -194,6 +194,7 @@ fn main() {
                             if let Some(action) = keybinds.get_action(vk) {
                                 match action {
                                     Action::Quit => *control = ControlFlow::Exit,
+                                    Action::Reset => model = matrix,
                                     Action::MoveDown => model.translate_2d([0.0, 1.0]),
                                     Action::MoveUp => model.translate_2d([0.0, -1.0]),
                                     Action::MoveLeft => model.translate_2d([1.0, 0.0]),
