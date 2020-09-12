@@ -5,6 +5,7 @@ use vek::mat::repr_c::column_major::mat4;
 
 #[macro_use]
 mod log;
+mod binds;
 mod texture;
 
 fn main() {
@@ -146,14 +147,10 @@ fn main() {
         std::process::exit(0);
     });
 
-    let matrix = mat4::Mat4::<f32>::new(
-        1.0, 0.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 0.0,
-        0.0, 0.0, 1.0, 0.0,
-        0.0, 0.0, 0.0, 1.0,
-    );
-
+    let matrix = mat4::Mat4::<f32>::default();
     let mut model = matrix.clone();
+
+    let keybinds = binds::Binds::default();
 
     el.run(move |event, _target, control| {
         use glium::Surface;
@@ -187,26 +184,25 @@ fn main() {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => *control = ControlFlow::Exit,
                 WindowEvent::Resized(size) => windowed_context.resize(size),
-                // TODO: Create functions to handle binds
                 WindowEvent::KeyboardInput { input, .. } => {
                     if input.state == glutin::event::ElementState::Pressed {
-                        // TODO: Maybe only request redraw when needed
-                        windowed_context.window().request_redraw();
                         if let Some(vk) = input.virtual_keycode {
-                            use glutin::event::VirtualKeyCode as VK;
-                            use std::f32::consts::PI as PI;
-                            match vk {
-                                VK::Q => *control = ControlFlow::Exit,
-                                VK::J => model.translate_2d([0.0, 1.0]),
-                                VK::K => model.translate_2d([0.0, -1.0]),
-                                VK::H => model.translate_2d([1.0, 0.0]),
-                                VK::L => model.translate_2d([-1.0, 0.0]),
-                                VK::Equals => model = matrix.clone(),
-                                VK::Subtract => model.scale_3d([0.5, 0.5, 1.0]),
-                                VK::Add => model.scale_3d([2.0, 2.0, 1.0]),
-                                VK::Comma => model.rotate_z(PI / 2.0),
-                                VK::Period => model.rotate_z(-PI / 2.0),
-                                _ => {}
+                            use binds::Action;
+                            use std::f32::consts::PI;
+
+                            windowed_context.window().request_redraw();
+                            if let Some(action) = keybinds.get_action(vk) {
+                                match action {
+                                    Action::Quit => *control = ControlFlow::Exit,
+                                    Action::MoveDown => model.translate_2d([0.0, 1.0]),
+                                    Action::MoveUp => model.translate_2d([0.0, -1.0]),
+                                    Action::MoveLeft => model.translate_2d([1.0, 0.0]),
+                                    Action::MoveRight => model.translate_2d([-1.0, 0.0]),
+                                    Action::ZoomIn => model.scale_3d([2.0, 2.0, 1.0]),
+                                    Action::ZoomOut => model.scale_3d([0.5, 0.5, 1.0]),
+                                    Action::RotateRight => model.rotate_z(PI / 2.0),
+                                    Action::RotateLeft => model.rotate_z(-PI / 2.0),
+                                }
                             }
                         }
                     }
