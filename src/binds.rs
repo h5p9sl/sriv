@@ -14,6 +14,7 @@ pub enum Action {
     ZoomOut,
 }
 
+#[derive(Clone)]
 pub struct Binds {
     binds: Vec<(VK, Action)>,
 }

@@ -13,9 +13,9 @@ version = "0.1.0-alpha"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-glutin = "0.24"
-glium = "0.27"
-colored = "2"
 clap = "2.33"
+colored = "2.0"
+glium = "0.27"
+glutin = "0.24"
 image = "0.23"
 vek = "0.12"

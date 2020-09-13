@@ -1,13 +1,13 @@
 use glium::texture;
 use image::DynamicImage;
-use std::path::Path;
+use std::path::PathBuf;
 
 pub fn dynamic_image_from_path<P>(fp: P) -> Option<DynamicImage>
 where
-    P: AsRef<Path>,
+    P: Into<PathBuf>,
 {
-    let fp = fp.as_ref();
-    let di = image::open(&fp);
+    let fp = fp.into();
+    let di = image::open(fp.as_path());
     if let Some(e) = di.as_ref().err() {
         eprintln!(
             "Failed to open image \"{}\": {}...",
@@ -78,9 +78,9 @@ where
 pub fn _texture_from_path<F, P>(display: &F, fp: P) -> Option<texture::SrgbTexture2d>
 where
     F: glium::backend::Facade,
-    P: AsRef<Path>,
+    P: Into<PathBuf>,
 {
-    if let Some(image) = dynamic_image_from_path(fp) {
+    if let Some(image) = dynamic_image_from_path(fp.into().as_path()) {
         return texture_from_dynamic_image(display, &image);
     }
     None
