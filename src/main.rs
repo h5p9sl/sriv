@@ -19,6 +19,7 @@ fn main() -> Result<(), String> {
     let app = app::build_app();
     let matches = app.get_matches();
 
+    let benchmark = matches.index_of("benchmark").is_some();
     let tex_path = matches.value_of("file").unwrap().to_string();
     let texture = std::thread::spawn(move || texture::dynamic_image_from_path(tex_path));
 
@@ -32,6 +33,10 @@ fn main() -> Result<(), String> {
             .unwrap();
     let mut image_quad = imagequad::ImageQuad::new(window.display(), texture);
 
+    if benchmark {
+        std::process::exit(0);
+    }
+
     log_verbose_t!("Creating input system");
     let binds = binds::Binds::default();
     let input = input::Input::new(&binds);
@@ -42,10 +47,12 @@ fn main() -> Result<(), String> {
         match event {
             Event::RedrawRequested(_id) => {
                 use glium::Surface;
-                window.draw(|frame| {
-                    frame.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
-                    image_quad.draw(frame).unwrap();
-                }).unwrap();
+                window
+                    .draw(|frame| {
+                        frame.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+                        image_quad.draw(frame).unwrap();
+                    })
+                    .unwrap();
             }
             Event::LoopDestroyed => log_verbose!("Loop destroyed"),
             Event::WindowEvent { event, .. } => match event {
