@@ -32,19 +32,34 @@ impl Input {
         }
     }
 
+    pub fn handle_char(
+        &self,
+        character: char,
+        image_quad: &mut ImageQuad,
+        control_flow: &mut ControlFlow,
+    ) -> bool {
+        if let Some(action) = self.binds.get_action_char(character) {
+            Self::perform_action(&action, image_quad.matrix_mut(), control_flow);
+            return true;
+        }
+        return false;
+    }
+
     pub fn handle(
         &self,
         event: &KeyboardInput,
         image_quad: &mut ImageQuad,
         control_flow: &mut ControlFlow,
-    ) {
+    ) -> bool {
         use glutin::event::ElementState::Pressed;
         if event.state == Pressed {
             if let Some(vk) = event.virtual_keycode {
                 if let Some(action) = self.binds.get_action(vk) {
                     Self::perform_action(&action, image_quad.matrix_mut(), control_flow);
+                    return true;
                 }
             }
         }
+        return false;
     }
 }

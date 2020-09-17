@@ -56,11 +56,17 @@ fn main() -> Result<(), String> {
             }
             Event::LoopDestroyed => log_verbose!("Loop destroyed"),
             Event::WindowEvent { event, .. } => match event {
+                WindowEvent::ReceivedCharacter(c) => {
+                    if input.handle_char(c, &mut image_quad, control_flow) {
+                        window.request_redraw();
+                    }
+                }
                 WindowEvent::KeyboardInput {
                     input: key_input, ..
                 } => {
-                    window.request_redraw();
-                    input.handle(&key_input, &mut image_quad, control_flow);
+                    if input.handle(&key_input, &mut image_quad, control_flow) {
+                        window.request_redraw();
+                    }
                 }
                 _ => window.handle(event, control_flow),
             },
