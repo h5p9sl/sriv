@@ -43,8 +43,12 @@ fn main() -> Result<(), String> {
 
     log_verbose_t!("Entering main loop");
     el.run(move |event, _, control_flow| {
-        use glutin::event::{Event, WindowEvent};
+        use glutin::event::{Event, StartCause, WindowEvent};
         match event {
+            Event::NewEvents(event) => match event {
+                StartCause::Init => window.request_redraw(),
+                _ => {}
+            },
             Event::RedrawRequested(_id) => {
                 use glium::Surface;
                 window
@@ -72,7 +76,5 @@ fn main() -> Result<(), String> {
             },
             _ => {}
         }
-
-        window.display().swap_buffers().unwrap();
     });
 }
