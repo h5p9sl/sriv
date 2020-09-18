@@ -57,7 +57,6 @@ fn main() -> Result<(), String> {
                         image_quad.draw(frame).unwrap();
                     })
                     .unwrap();
-                window.display().swap_buffers().unwrap();
             }
             Event::LoopDestroyed => log_verbose!("Loop destroyed"),
             Event::WindowEvent { event, .. } => match event {
