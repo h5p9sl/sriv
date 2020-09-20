@@ -46,7 +46,10 @@ fn main() -> Result<(), String> {
         use glutin::event::{Event, StartCause, WindowEvent};
         match event {
             Event::NewEvents(event) => match event {
-                StartCause::Init => window.request_redraw(),
+                StartCause::Init => {
+                    window.request_redraw();
+                    image_quad.fit_to_window(&window);
+                }
                 _ => {}
             },
             Event::RedrawRequested(_id) => {
@@ -60,6 +63,10 @@ fn main() -> Result<(), String> {
             }
             Event::LoopDestroyed => log_verbose!("Loop destroyed"),
             Event::WindowEvent { event, .. } => match event {
+                WindowEvent::Resized(_size) => {
+                    image_quad.fit_to_window(&window);
+                    window.handle(event, control_flow);
+                }
                 WindowEvent::ReceivedCharacter(c) => {
                     if input.handle_char(c, &mut image_quad, control_flow) {
                         window.request_redraw();

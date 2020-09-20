@@ -1,3 +1,4 @@
+use crate::window::Window;
 use glium::{
     backend::Facade, implement_vertex, program, texture::SrgbTexture2d, uniform, IndexBuffer,
     Program, Surface, VertexBuffer,
@@ -16,6 +17,7 @@ pub struct ImageQuad {
     index_buffer: IndexBuffer<u8>,
     program: Program,
     matrix: Mat4<f32>,
+    image_size: (f32, f32),
     texture: SrgbTexture2d,
 }
 
@@ -26,6 +28,7 @@ impl ImageQuad {
             index_buffer: Self::create_ibo(display),
             program: Self::create_program(display),
             matrix: Mat4::<f32>::default(),
+            image_size: (1.0, 1.0),
             texture: texture,
         }
     }
@@ -34,6 +37,7 @@ impl ImageQuad {
         let uniforms = uniform! {
             matrix: self.matrix.into_col_arrays(),
             texture: self.texture.sampled(),
+            image_size: self.image_size,
         };
 
         surface.draw(
@@ -43,6 +47,41 @@ impl ImageQuad {
             &uniforms,
             &Default::default(),
         )
+    }
+
+    pub fn fit_to_window(&mut self, window: &Window) {
+        use std::ops::Deref;
+        let ts = self.texture.dimensions();
+        let ws: [u32; 2] = window
+            .deref()
+            .display()
+            .gl_window()
+            .deref()
+            .deref()
+            .window()
+            .inner_size()
+            .into();
+
+        assert!(ts.0 >= 1 && ts.1 >= 1);
+        assert!(ws[0] >= 1 && ws[1] >= 1);
+
+        let mut s = (ts.0 as f32, ts.1 as f32);
+        let ws = (ws[0] as f32, ws[1] as f32);
+        if s.0 > ws.0 {
+            let scaling_factor = ws.0 / s.0;
+            s.0 *= scaling_factor;
+            s.1 *= scaling_factor;
+        }
+        if s.1 > ws.1 {
+            let scaling_factor = ws.1 / s.1;
+            s.0 *= scaling_factor;
+            s.1 *= scaling_factor;
+        }
+
+        s.0 /= ws.0;
+        s.1 /= ws.1;
+
+        self.image_size = s;
     }
 
     pub fn _matrix(&self) -> &Mat4<f32> {
@@ -95,8 +134,10 @@ impl ImageQuad {
         in vec2 texcoord;
         out vec2 vTexCoord;
         uniform mat4 matrix;
+        uniform vec2 image_size;
         void main() {
             gl_Position = matrix * vec4(position, 0.0, 1.0);
+            gl_Position *= vec4(image_size, 1.0, 1.0);
             vTexCoord = texcoord;
         }
         ",
