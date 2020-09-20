@@ -50,23 +50,14 @@ impl ImageQuad {
     }
 
     pub fn fit_to_window(&mut self, window: &Window) {
-        use std::ops::Deref;
         let ts = self.texture.dimensions();
-        let ws: [u32; 2] = window
-            .deref()
-            .display()
-            .gl_window()
-            .deref()
-            .deref()
-            .window()
-            .inner_size()
-            .into();
+        let ws  = window.display().get_framebuffer_dimensions();
 
         assert!(ts.0 >= 1 && ts.1 >= 1);
-        assert!(ws[0] >= 1 && ws[1] >= 1);
+        assert!(ws.0 >= 1 && ws.1 >= 1);
 
         let mut s = (ts.0 as f32, ts.1 as f32);
-        let ws = (ws[0] as f32, ws[1] as f32);
+        let ws = (ws.0 as f32, ws.1 as f32);
         if s.0 > ws.0 {
             let scaling_factor = ws.0 / s.0;
             s.0 *= scaling_factor;
