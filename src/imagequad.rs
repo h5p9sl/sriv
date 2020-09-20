@@ -51,7 +51,7 @@ impl ImageQuad {
 
     pub fn fit_to_window(&mut self, window: &Window) {
         let ts = self.texture.dimensions();
-        let ws  = window.display().get_framebuffer_dimensions();
+        let ws = window.display().get_framebuffer_dimensions();
 
         assert!(ts.0 >= 1 && ts.1 >= 1);
         assert!(ws.0 >= 1 && ws.1 >= 1);

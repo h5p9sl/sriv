@@ -1,5 +1,5 @@
 #[macro_use]
-mod log;
+extern crate log;
 
 mod app;
 mod binds;
@@ -8,40 +8,40 @@ mod input;
 mod texture;
 mod window;
 
-fn main() -> Result<(), String> {
-    let st = std::time::Instant::now();
-    macro_rules! log_verbose_t {
-        ($($args:tt)*) => ({
-            log_verbose!("{}: {}", st.elapsed().as_secs_f32().to_string().green(), format_args!($($args)*));
-        })
-    }
+fn build_logger() -> Result<(), log::SetLoggerError> {
+    env_logger::builder().format_timestamp_millis().try_init()
+}
 
+fn main() -> Result<(), String> {
     let app = app::build_app();
     let matches = app.get_matches();
+    build_logger().unwrap();
 
     let benchmark = matches.index_of("benchmark").is_some();
     let tex_path = matches.value_of("file").unwrap().to_string();
-    let texture = std::thread::spawn(move || texture::dynamic_image_from_path(tex_path));
+    info!("Loading image");
+    let image = std::thread::spawn(move || texture::Image::new(tex_path));
 
-    log_verbose_t!("Creating window");
+    info!("Creating window");
     let el = glutin::event_loop::EventLoop::new();
     let mut window = window::Window::new(&el)?;
 
-    log_verbose_t!("Creating texture");
+    info!("Creating texture");
+    let image = image.join().unwrap().unwrap();
     let texture =
-        texture::texture_from_dynamic_image(window.display(), &texture.join().unwrap().unwrap())
-            .unwrap();
+        texture::texture_from_dynamic_image(window.display(), &image.image.unwrap()).unwrap();
+    info!("Creating imagequad");
     let mut image_quad = imagequad::ImageQuad::new(window.display(), texture);
 
     if benchmark {
         std::process::exit(0);
     }
 
-    log_verbose_t!("Creating input system");
+    info!("Creating input system");
     let binds = binds::Binds::default();
     let input = input::Input::new(&binds);
 
-    log_verbose_t!("Entering main loop");
+    info!("Entering main loop");
     el.run(move |event, _, control_flow| {
         use glutin::event::{Event, StartCause, WindowEvent};
         match event {
@@ -61,11 +61,10 @@ fn main() -> Result<(), String> {
                     })
                     .unwrap();
             }
-            Event::LoopDestroyed => log_verbose!("Loop destroyed"),
+            Event::LoopDestroyed => info!("Loop destroyed"),
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::Resized(_size) => {
                     image_quad.fit_to_window(&window);
-                    window.handle(event, control_flow);
                 }
                 WindowEvent::ReceivedCharacter(c) => {
                     if input.handle_char(c, &mut image_quad, control_flow) {

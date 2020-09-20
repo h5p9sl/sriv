@@ -1,7 +1,48 @@
 use glium::texture;
-use image::DynamicImage;
+use image::{gif::GifDecoder, io::Reader, AnimationDecoder, DynamicImage, Frame, ImageFormat};
 use std::path::PathBuf;
 
+pub struct Image {
+    pub frames: Option<Vec<Frame>>,
+    pub image: Option<DynamicImage>,
+}
+
+impl Image {
+    pub fn new<F>(fp: F) -> Option<Image>
+    where
+        F: Into<PathBuf>,
+    {
+        let fp = fp.into();
+        let reader = Reader::open(&fp)
+            .expect("Failed to open file")
+            .with_guessed_format()
+            .expect("Unable to open file for parsing");
+
+        let format = reader.format().expect("File doesn't have valid format");
+        match format {
+            ImageFormat::Gif => Self::load_into_frames(
+                GifDecoder::new(reader.into_inner()).expect("Failed to create GifDecoder"),
+            ),
+            _ => Some(Image {
+                image: reader.decode().ok(),
+                frames: None,
+            }),
+        }
+    }
+
+    fn load_into_frames<'a, D>(decoder: D) -> Option<Image>
+    where
+        D: AnimationDecoder<'a>,
+    {
+        let frames = decoder.into_frames().collect_frames();
+        Some(Image {
+            image: None,
+            frames: frames.ok(),
+        })
+    }
+}
+
+#[deprecated]
 pub fn dynamic_image_from_path<P>(fp: P) -> Option<DynamicImage>
 where
     P: Into<PathBuf>,
@@ -18,6 +59,7 @@ where
     di.ok()
 }
 
+#[deprecated]
 pub fn texture_from_dynamic_image<F>(
     display: &F,
     image: &DynamicImage,
@@ -72,16 +114,4 @@ where
         return texture::SrgbTexture2d::new(display, data).ok();
     }
     texture::SrgbTexture2d::new(display, raw_image_data.1.unwrap()).ok()
-}
-
-/// Wrapper for dynamic_image_from_path and texture_from_dynamic_image
-pub fn _texture_from_path<F, P>(display: &F, fp: P) -> Option<texture::SrgbTexture2d>
-where
-    F: glium::backend::Facade,
-    P: Into<PathBuf>,
-{
-    if let Some(image) = dynamic_image_from_path(fp.into().as_path()) {
-        return texture_from_dynamic_image(display, &image);
-    }
-    None
 }

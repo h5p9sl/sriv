@@ -38,10 +38,8 @@ impl Window {
     }
 
     pub fn handle(&mut self, event: WindowEvent, control_flow: &mut ControlFlow) {
-        use std::ops::Deref;
         match event {
             WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-            WindowEvent::Resized(size) => self.display.gl_window().deref().deref().resize(size),
             _ => {}
         }
     }

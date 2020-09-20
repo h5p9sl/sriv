@@ -1,2 +1,10 @@
+/Cargo.lock
 /target
 **/*.rs.bk
+
+# Images for testing purposes
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+
