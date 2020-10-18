@@ -1,69 +1,71 @@
 use crate::image::LoadedImage;
-use core::slice::Iter;
 
 #[derive(Debug)]
 pub enum ImageLoaderError {
-    InvalidPath(String),
-    ImageError(::image::ImageError),
-    IOError(std::io::Error),
+    InvalidPath(std::path::PathBuf),
+    ImageError(Box<::image::ImageError>),
+    IOError(Box<std::io::Error>),
 }
 
 impl std::error::Error for ImageLoaderError {}
 impl std::fmt::Display for ImageLoaderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        unimplemented!();
+        use self::ImageLoaderError::*;
+        match self {
+            InvalidPath(p) => write!(f, "Invalid Path: \"{}\"", p.to_str().unwrap_or("<???>")),
+            ImageError(e) => write!(f, "{:?}", e),
+            IOError(e) => write!(f, "{:?}", e),
+        }
     }
 }
 
 impl From<std::io::Error> for ImageLoaderError {
     fn from(error: std::io::Error) -> Self {
-        ImageLoaderError::IOError(error)
+        ImageLoaderError::IOError(Box::new(error))
     }
 }
 
 impl From<::image::ImageError> for ImageLoaderError {
     fn from(error: ::image::ImageError) -> Self {
-        ImageLoaderError::ImageError(error)
+        ImageLoaderError::ImageError(Box::new(error))
     }
 }
 
 // TODO: Add documentation here
-pub struct ImageLoader<'a> {
-    images: Iter<'a, std::path::PathBuf>,
+pub struct ImageLoader {
+    images: Vec<std::path::PathBuf>,
+    current_image: usize,
 }
 
-impl ImageLoader<'_> {
+impl ImageLoader {
     pub fn from_image_path<P: Into<std::path::PathBuf>>(path: P) -> Result<Self, ImageLoaderError> {
         let path: std::path::PathBuf = path.into();
 
-        assert!(
-            path.exists(),
-            "{} does not exist.",
-            path.to_str().unwrap_or("?")
-        );
-
         let mut images = Vec::new();
 
-        if path.is_file() {
-            images.push(path.to_owned());
+        if !path.exists() {
+            Err(ImageLoaderError::InvalidPath(path))
+        } else if path.is_file() {
+            images.push(path);
             Ok(ImageLoader {
-                images: images.iter(),
+                images,
+                current_image: 0,
             })
         } else if path.is_dir() {
-            // TODO
-            unimplemented!();
+            todo!(); // TODO
             Ok(ImageLoader {
-                images: images.iter(),
+                images,
+                current_image: 0,
             })
         } else {
-            panic!("Invalid path: {}", path.to_str().unwrap_or("?"));
+            Err(ImageLoaderError::InvalidPath(path))
         }
     }
 }
 
-impl ImageLoader<'_> {
+impl ImageLoader {
     fn load_image<P: Into<std::path::PathBuf>>(path: P) -> Result<LoadedImage, ImageLoaderError> {
-        use ::image::{io::Reader, ImageFormat, gif::GifDecoder, AnimationDecoder};
+        use ::image::{gif::GifDecoder, io::Reader, AnimationDecoder, ImageFormat};
 
         let reader = Reader::open(path.into())?.with_guessed_format()?;
         let format = reader.format().unwrap();
@@ -71,21 +73,27 @@ impl ImageLoader<'_> {
         match format {
             ImageFormat::Gif => Ok((
                 None,
-                Some(GifDecoder::new(reader.into_inner())?.into_frames().collect_frames()?),
+                Some(
+                    GifDecoder::new(reader.into_inner())?
+                        .into_frames()
+                        .collect_frames()?,
+                ),
             )),
             _ => Ok((Some(reader.decode()?), None)),
         }
     }
 }
 
-impl std::iter::Iterator for ImageLoader<'_> {
+impl std::iter::Iterator for ImageLoader {
     type Item = LoadedImage;
 
     /// Reads the next image into memory
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(path) = self.images.next() {
+        if let Some(path) = self.images.get(self.current_image) {
+            self.current_image += 1;
             Some(Self::load_image(path).unwrap())
         } else {
+            self.current_image += 0;
             None
         }
     }

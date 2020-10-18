@@ -25,7 +25,7 @@ impl Window {
 
         let display = glium::Display::new(wb, cb, el).unwrap();
 
-        Ok(Window { display: display })
+        Ok(Window { display })
     }
 
     pub fn draw<F>(&mut self, f: F) -> Result<(), SwapBuffersError>
@@ -38,9 +38,8 @@ impl Window {
     }
 
     pub fn handle(&mut self, event: WindowEvent, control_flow: &mut ControlFlow) {
-        match event {
-            WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-            _ => {}
+        if let WindowEvent::CloseRequested = event {
+            *control_flow = ControlFlow::Exit;
         }
     }
 

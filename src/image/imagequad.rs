@@ -29,7 +29,7 @@ impl ImageQuad {
             program: Self::create_program(display),
             matrix: Mat4::<f32>::default(),
             image_size: (1.0, 1.0),
-            texture: texture,
+            texture,
         }
     }
 

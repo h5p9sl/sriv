@@ -7,7 +7,7 @@ mod image;
 mod input;
 mod window;
 
-use crate::image::{Image, ImageLoader};
+use crate::image::Image;
 
 fn build_logger() -> Result<(), log::SetLoggerError> {
     env_logger::builder().format_timestamp_millis().try_init()
@@ -23,15 +23,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load the image from disk on separate thread
     info!("Getting image(s) from \"{}\"", image_path);
-    let mut imageloader = image::ImageLoader::from_image_path(image_path)?;
-    let image = std::thread::spawn(&mut || imageloader.next());
+    let mut imageloader = image::ImageLoader::from_image_path(image_path).unwrap();
+    let image = std::thread::spawn(move || {
+        let next = imageloader.next();
+        (next, imageloader)
+    });
 
     info!("Creating window");
     let el = glutin::event_loop::EventLoop::new();
     let mut window = window::Window::new(&el)?;
 
     info!("Creating image object");
-    let mut image = Image::from(image.join().unwrap().unwrap());
+    let (next, _imageloader) = image.join().unwrap();
+    let mut image = Image::from(next.unwrap());
 
     if benchmark {
         std::process::exit(0);
@@ -53,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     image.quad().unwrap().fit_to_window(&window);
                 }
                 StartCause::ResumeTimeReached {
-                    start,
+                    start: _,
                     requested_resume,
                 } => {
                     while image.time_next_frame().unwrap() <= requested_resume {
