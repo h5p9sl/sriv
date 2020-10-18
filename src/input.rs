@@ -1,6 +1,6 @@
 use crate::{
     binds::{Action, Binds},
-    imagequad::ImageQuad,
+    image::ImageQuad,
 };
 use glutin::{event::KeyboardInput, event_loop::ControlFlow};
 use vek::mat::repr_c::column_major::mat4::Mat4;

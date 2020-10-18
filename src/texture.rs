@@ -30,6 +30,10 @@ impl Image {
         }
     }
 
+    pub fn is_animated(&self) -> bool {
+        self.frames.is_some()
+    }
+
     fn load_into_frames<'a, D>(decoder: D) -> Option<Image>
     where
         D: AnimationDecoder<'a>,
@@ -40,23 +44,6 @@ impl Image {
             frames: frames.ok(),
         })
     }
-}
-
-#[deprecated]
-pub fn dynamic_image_from_path<P>(fp: P) -> Option<DynamicImage>
-where
-    P: Into<PathBuf>,
-{
-    let fp = fp.into();
-    let di = image::open(fp.as_path());
-    if let Some(e) = di.as_ref().err() {
-        eprintln!(
-            "Failed to open image \"{}\": {}...",
-            fp.to_str().unwrap_or("null"),
-            e
-        );
-    }
-    di.ok()
 }
 
 #[deprecated]
