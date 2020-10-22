@@ -93,7 +93,7 @@ impl std::iter::Iterator for ImageLoader {
             self.current_image += 1;
             Some(Self::load_image(path).unwrap())
         } else {
-            self.current_image += 0;
+            self.current_image = 0;
             None
         }
     }

@@ -36,6 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Creating image object");
     let (next, _imageloader) = image.join().unwrap();
     let mut image = Image::from(next.unwrap());
+    image.generate_quad(window.display());
 
     if benchmark {
         std::process::exit(0);
