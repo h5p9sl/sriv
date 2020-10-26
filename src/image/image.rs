@@ -63,10 +63,21 @@ impl Image {
         }
     }
 
-    pub fn next_frame(&mut self) {
+    pub fn next_frame<F: glium::backend::Facade>(&mut self, display: &F) {
         self.last_frame_instant = std::time::Instant::now();
+        // Next frame
         self.current_frame += 1;
-        //self.quad.expect("Cannot set next frame: no quad").set_texture(frame);
+        if self.current_frame > self.frames.len() {
+            self.current_frame = 0;
+        }
+        debug!("Frame {}", self.current_frame);
+        // Update imagequad
+        if let Some(frame) = self.frames.get(self.current_frame) {
+            self.quad
+                .as_mut()
+                .expect("Cannot set next frame: no quad")
+                .set_image(frame.buffer(), display);
+        }
     }
 
     pub fn quad(&mut self) -> Option<&mut self::ImageQuad> {

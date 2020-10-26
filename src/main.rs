@@ -62,7 +62,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     requested_resume,
                 } => {
                     while image.time_next_frame().unwrap() <= requested_resume {
-                        image.next_frame();
+                        image.next_frame(window.display());
+                        window.request_redraw();
                     }
                 }
                 _ => {}

@@ -75,6 +75,19 @@ impl ImageQuad {
         self.image_size = s;
     }
 
+    pub fn set_image<F>(&mut self, image: &::image::RgbaImage, display: &F)
+    where
+        F: glium::backend::Facade,
+    {
+        use glium::texture::{RawImage2d, SrgbTexture2d};
+        let dimensions = image.dimensions();
+
+        self.texture = {
+            let raw_image = RawImage2d::from_raw_rgba(image.as_raw().to_owned(), dimensions);
+            SrgbTexture2d::new(display, raw_image).unwrap()
+        };
+    }
+
     pub fn _matrix(&self) -> &Mat4<f32> {
         &self.matrix
     }
