@@ -1,4 +1,5 @@
 use crate::image::LoadedImage;
+use std::path::PathBuf;
 
 #[derive(Debug)]
 pub enum ImageLoaderError {
@@ -38,28 +39,59 @@ pub struct ImageLoader {
 }
 
 impl ImageLoader {
-    pub fn from_image_path<P: Into<std::path::PathBuf>>(path: P) -> Result<Self, ImageLoaderError> {
-        let path: std::path::PathBuf = path.into();
+    fn is_image(path: &PathBuf) -> bool {
+        use ::image::io::Reader;
+        Reader::open(path).unwrap().format().is_some()
+    }
 
+    fn find_images(path: &PathBuf, recurse: bool) -> Vec<PathBuf> {
         let mut images = Vec::new();
 
-        if !path.exists() {
-            Err(ImageLoaderError::InvalidPath(path))
-        } else if path.is_file() {
-            images.push(path);
-            Ok(ImageLoader {
-                images,
-                current_image: 0,
-            })
-        } else if path.is_dir() {
-            todo!(); // TODO
-            Ok(ImageLoader {
-                images,
-                current_image: 0,
-            })
-        } else {
-            Err(ImageLoaderError::InvalidPath(path))
+        assert_eq!(path.is_dir(), true);
+
+        for entry in path.read_dir().unwrap() {
+            if let Ok(entry) = entry {
+                let t = entry.file_type().unwrap();
+                let path = entry.path();
+
+                if t.is_dir() && recurse {
+                    debug!("Recursing subirectory {:?}", &path);
+                    images.append(&mut Self::find_images(&path, true));
+                } else if t.is_file() && Self::is_image(&path) {
+                    debug!("Found image: {:?}", &path);
+                    images.push(path);
+                }
+            } else {
+                error!("{:?}", entry.err());
+            }
         }
+        images
+    }
+
+    pub fn from_paths<P>(paths: &[P], recurse: bool) -> Result<Self, ImageLoaderError>
+    where
+        P: Into<PathBuf> + AsRef<std::ffi::OsStr>,
+    {
+        let mut images = Vec::new();
+
+        for path in paths.iter() {
+            let path: PathBuf = PathBuf::from(&path);
+
+            if !path.exists() {
+                return Err(ImageLoaderError::InvalidPath(path));
+            } else if path.is_file() {
+                images.push(path);
+            } else if path.is_dir() {
+                images.append(&mut Self::find_images(&path, recurse));
+            } else {
+                return Err(ImageLoaderError::InvalidPath(path));
+            }
+        }
+
+        Ok(Self {
+            images,
+            current_image: 0usize,
+        })
     }
 }
 

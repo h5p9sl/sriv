@@ -79,7 +79,7 @@ impl ImageQuad {
     where
         F: glium::backend::Facade,
     {
-        use glium::texture::{RawImage2d, SrgbTexture2d};
+        use glium::texture::RawImage2d;
         let dimensions = image.dimensions();
 
         self.texture = {
@@ -140,12 +140,13 @@ impl ImageQuad {
         uniform mat4 matrix;
         uniform vec2 image_size;
         void main() {
-            gl_Position = matrix * vec4(position, 0.0, 1.0);
-            gl_Position *= vec4(image_size, 1.0, 1.0);
+            gl_Position = matrix
+				* vec4(position, 0.0, 1.0)
+				* vec4(image_size, 1.0, 1.0);
             vTexCoord = texcoord;
         }
         ",
-        fragment: "
+            fragment: "
         #version 140
         in vec2 vTexCoord;
         out vec4 f_color;

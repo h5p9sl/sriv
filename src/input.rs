@@ -31,6 +31,7 @@ impl Input {
             Action::RotateRight => matrix.rotate_z(-PI / 2.0),
             Action::ZoomIn => matrix.scale_3d([1.0 / ZOOM_FACTOR, 1.0 / ZOOM_FACTOR, 1.0]),
             Action::ZoomOut => matrix.scale_3d([ZOOM_FACTOR, ZOOM_FACTOR, 1.0]),
+            _ => {}
         }
     }
 
@@ -42,9 +43,10 @@ impl Input {
     ) -> bool {
         if let Some(action) = self.binds.get_action_char(character) {
             Self::perform_action(&action, image_quad.matrix_mut(), control_flow);
-            return true;
+            true
+        } else {
+            false
         }
-        return false;
     }
 
     pub fn handle(
@@ -62,6 +64,6 @@ impl Input {
                 }
             }
         }
-        return false;
+        false
     }
 }

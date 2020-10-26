@@ -1,7 +1,7 @@
 [package]
 authors = ["h5p9sl"]
 categories = ["multimedia::images"]
-description = "sriv is a convenient and fast alternative to 'sxiv'"
+description = "A convenient image viewer inspired by sxiv, written in Rust"
 edition = "2018"
 keywords = ["image", "viewer"]
 license = "MIT/Apache-2.0"

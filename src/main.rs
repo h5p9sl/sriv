@@ -19,11 +19,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     build_logger().unwrap();
 
     let benchmark = matches.index_of("benchmark").is_some();
-    let image_path = matches.value_of("file").unwrap().to_string();
+    let image_paths: Vec<&str> = matches.values_of("file").unwrap().collect();
+    let recurse = matches.is_present("recursive");
 
     // Load the image from disk on separate thread
-    info!("Getting image(s) from \"{}\"", image_path);
-    let mut imageloader = image::ImageLoader::from_image_path(image_path).unwrap();
+    let mut imageloader = image::ImageLoader::from_paths(&image_paths, recurse).unwrap();
     let image = std::thread::spawn(move || {
         let next = imageloader.next();
         (next, imageloader)
@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut window = window::Window::new(&el)?;
 
     info!("Creating image object");
-    let (next, _imageloader) = image.join().unwrap();
+    let (next, mut imageloader) = image.join().unwrap();
     let mut image = Image::from(next.unwrap());
     image.generate_quad(window.display());
 
@@ -43,7 +43,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     info!("Creating input system");
-    let input = input::Input::new(&binds::Binds::default());
+    let binds = binds::Binds::default();
+    let input = input::Input::new(&binds);
 
     info!("Entering main loop");
     el.run(move |event, _, control_flow| {
@@ -94,15 +95,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     image.quad().unwrap().fit_to_window(&window);
                 }
                 WindowEvent::ReceivedCharacter(c) => {
-                    if input.handle_char(c, &mut image.quad().unwrap(), control_flow) {
-                        window.request_redraw();
+                    if let Some(action) = binds.get_action_char(c) {
+                        use binds::Action;
+                        match action {
+                            Action::NextImage => {
+                                if let Some(loadedimage) = imageloader.next() {
+                                    image = Image::from(loadedimage);
+                                    image.generate_quad(window.display());
+                                    image.quad().unwrap().fit_to_window(&window);
+                                }
+                            }
+                            Action::PrevImage => todo!(),
+                            _ => {
+                                if input.handle_char(c, &mut image.quad().unwrap(), control_flow) {
+                                    window.request_redraw();
+                                }
+                            }
+                        }
                     }
                 }
                 WindowEvent::KeyboardInput {
                     input: key_input, ..
                 } => {
-                    if input.handle(&key_input, &mut image.quad().unwrap(), control_flow) {
-                        window.request_redraw();
+                    if let Some(action) = binds.get_action(key_input.virtual_keycode.unwrap()) {
+                        use binds::Action;
+                        match action {
+                            Action::Quit => *control_flow = ControlFlow::Exit,
+                            _ => {
+                                if input.handle(
+                                    &key_input,
+                                    &mut image.quad().unwrap(),
+                                    control_flow,
+                                ) {
+                                    window.request_redraw();
+                                }
+                            }
+                        }
                     }
                 }
                 _ => window.handle(event, control_flow),
