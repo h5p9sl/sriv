@@ -23,30 +23,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let recurse = matches.is_present("recursive");
 
     // Load the image from disk on separate thread
-    let mut imageloader = image::ImageLoader::from_paths(&image_paths, recurse).unwrap();
-    let image = std::thread::spawn(move || {
-        let next = imageloader.next();
-        (next, imageloader)
-    });
+    let mut imageloader = image::ImageLoader::from_paths(&image_paths, recurse)?;
+    let image = std::thread::Builder::new()
+        .name("bg_imageloader".into())
+        .spawn(move || {
+            let next = imageloader.next().expect("Failed to load any valid images");
+            (next, imageloader)
+        })?;
 
-    info!("Creating window");
+    debug!("Creating window");
     let el = glutin::event_loop::EventLoop::new();
     let mut window = window::Window::new(&el)?;
 
-    info!("Creating image object");
+    debug!("Creating image object");
     let (next, mut imageloader) = image.join().unwrap();
-    let mut image = Image::from(next.unwrap());
+    let mut image = Image::from(next);
     image.generate_quad(window.display());
 
     if benchmark {
         std::process::exit(0);
     }
 
-    info!("Creating input system");
+    debug!("Creating input system");
     let binds = binds::Binds::default();
     let input = input::Input::new(&binds);
 
-    info!("Entering main loop");
+    debug!("Entering main loop");
     el.run(move |event, _, control_flow| {
         use glutin::{
             event::{Event, StartCause, WindowEvent},
@@ -89,15 +91,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     *control_flow = ControlFlow::Wait;
                 }
             }
-            Event::LoopDestroyed => info!("Loop destroyed"),
+            Event::LoopDestroyed => debug!("Loop destroyed"),
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::Resized(_size) => {
                     image.quad().unwrap().fit_to_window(&window);
                 }
+                // TODO: Clean up ReceivedCharacter & KeyboardInput
                 WindowEvent::ReceivedCharacter(c) => {
                     if let Some(action) = binds.get_action_char(c) {
                         use binds::Action;
                         match action {
+                            Action::ToggleFullscreen => window.toggle_fullscreen(),
                             Action::NextImage => {
                                 if let Some(loadedimage) = imageloader.next() {
                                     image = Image::from(loadedimage);
@@ -105,7 +109,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     image.quad().unwrap().fit_to_window(&window);
                                 }
                             }
-                            Action::PrevImage => todo!(),
+                            Action::PrevImage => {
+                                if let Some(loadedimage) = imageloader.next_back() {
+                                    image = Image::from(loadedimage);
+                                    image.generate_quad(window.display());
+                                    image.quad().unwrap().fit_to_window(&window);
+                                }
+                            }
                             _ => {
                                 if input.handle_char(c, &mut image.quad().unwrap(), control_flow) {
                                     window.request_redraw();
@@ -117,17 +127,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 WindowEvent::KeyboardInput {
                     input: key_input, ..
                 } => {
-                    if let Some(action) = binds.get_action(key_input.virtual_keycode.unwrap()) {
-                        use binds::Action;
-                        match action {
-                            Action::Quit => *control_flow = ControlFlow::Exit,
-                            _ => {
-                                if input.handle(
-                                    &key_input,
-                                    &mut image.quad().unwrap(),
-                                    control_flow,
-                                ) {
-                                    window.request_redraw();
+                    if let Some(virt_key) = key_input.virtual_keycode {
+                        if let Some(action) = binds.get_action(virt_key) {
+                            use binds::Action;
+                            match action {
+                                Action::Quit => *control_flow = ControlFlow::Exit,
+                                _ => {
+                                    if input.handle(
+                                        &key_input,
+                                        &mut image.quad().unwrap(),
+                                        control_flow,
+                                    ) {
+                                        window.request_redraw();
+                                    }
                                 }
                             }
                         }

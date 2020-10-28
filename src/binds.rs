@@ -14,6 +14,7 @@ pub enum Action {
     RotateRight,
     ZoomIn,
     ZoomOut,
+    ToggleFullscreen,
 }
 
 #[derive(Clone)]
@@ -33,6 +34,7 @@ impl Default for Binds {
                 (None, Some(VK::L), Action::MoveRight),
                 (None, Some(VK::Q), Action::Quit),
                 (None, Some(VK::Subtract), Action::ZoomOut),
+                (Some('f'), None, Action::ToggleFullscreen),
                 (Some('n'), None, Action::NextImage),
                 (Some('p'), None, Action::PrevImage),
                 (Some('<'), None, Action::RotateLeft),

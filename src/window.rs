@@ -44,16 +44,33 @@ impl Window {
     }
 
     pub fn request_redraw(&mut self) {
-        use std::ops::Deref;
+        use std::borrow::BorrowMut;
         self.display
             .gl_window()
-            .deref()
-            .deref()
+            .borrow_mut()
+            .borrow_mut()
             .window()
             .request_redraw();
     }
 
     pub fn display(&self) -> &Display {
         &self.display
+    }
+
+    pub fn toggle_fullscreen(&mut self) {
+        unimplemented!();
+        /*
+        use std::borrow::BorrowMut;
+        let glw = &mut self.display.gl_window();
+        let wc = glw.borrow_mut().borrow_mut();
+        wc.window().set_fullscreen({
+            if let Some(mode) = wc.window().fullscreen() {
+                None
+            } else {
+                use ::glutin::window::Fullscreen;
+                Some(Fullscreen::Borderless(None))
+            }
+        });
+        */
     }
 }

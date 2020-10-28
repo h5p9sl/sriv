@@ -70,7 +70,6 @@ impl Image {
         if self.current_frame > self.frames.len() {
             self.current_frame = 0;
         }
-        debug!("Frame {}", self.current_frame);
         // Update imagequad
         if let Some(frame) = self.frames.get(self.current_frame) {
             self.quad

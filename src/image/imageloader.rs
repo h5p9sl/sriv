@@ -3,19 +3,30 @@ use std::path::PathBuf;
 
 #[derive(Debug)]
 pub enum ImageLoaderError {
-    InvalidPath(std::path::PathBuf),
-    ImageError(Box<::image::ImageError>),
     IOError(Box<std::io::Error>),
+    ImageError(Box<::image::ImageError>),
+    InvalidPath(std::path::PathBuf),
+    NoImageFound,
 }
 
-impl std::error::Error for ImageLoaderError {}
+impl std::error::Error for ImageLoaderError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use self::ImageLoaderError::*;
+        match self {
+            IOError(e) => Some(e),
+            ImageError(e) => Some(e),
+            _ => None,
+        }
+    }
+}
 impl std::fmt::Display for ImageLoaderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use self::ImageLoaderError::*;
         match self {
-            InvalidPath(p) => write!(f, "Invalid Path: \"{}\"", p.to_str().unwrap_or("<???>")),
-            ImageError(e) => write!(f, "{:?}", e),
             IOError(e) => write!(f, "{:?}", e),
+            ImageError(e) => write!(f, "{:?}", e),
+            InvalidPath(p) => write!(f, "Invalid Path: \"{}\"", p.to_str().unwrap_or("<???>")),
+            NoImageFound => write!(f, "No valid images found"),
         }
     }
 }
@@ -35,37 +46,46 @@ impl From<::image::ImageError> for ImageLoaderError {
 // TODO: Add documentation here
 pub struct ImageLoader {
     images: Vec<std::path::PathBuf>,
-    current_image: usize,
+    current_image: Option<usize>,
 }
 
 impl ImageLoader {
-    fn is_image(path: &PathBuf) -> bool {
+    fn is_image(path: &PathBuf) -> Result<bool, ::image::ImageError> {
         use ::image::io::Reader;
-        Reader::open(path).unwrap().format().is_some()
+        Ok(Reader::open(path)?.format().is_some())
     }
 
-    fn find_images(path: &PathBuf, recurse: bool) -> Vec<PathBuf> {
+    fn find_images(path: &PathBuf, recurse: bool) -> Option<Vec<PathBuf>> {
         let mut images = Vec::new();
 
         assert_eq!(path.is_dir(), true);
 
-        for entry in path.read_dir().unwrap() {
-            if let Ok(entry) = entry {
-                let t = entry.file_type().unwrap();
-                let path = entry.path();
+        let directory = path.read_dir();
 
-                if t.is_dir() && recurse {
-                    debug!("Recursing subirectory {:?}", &path);
-                    images.append(&mut Self::find_images(&path, true));
-                } else if t.is_file() && Self::is_image(&path) {
-                    debug!("Found image: {:?}", &path);
-                    images.push(path);
+        if let Ok(directory) = directory {
+            for entry in directory {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    let t = entry.file_type().unwrap();
+
+                    if t.is_dir() && recurse {
+                        debug!("Recursing subirectory {:?}", &path);
+                        if let Some(mut i) = Self::find_images(&path, true) {
+                            images.append(&mut i);
+                        }
+                    } else if t.is_file() && Self::is_image(&path).unwrap_or(false) {
+                        debug!("Found image: {:?}", &path);
+                        images.push(path);
+                    }
+                } else {
+                    warn!("{}", entry.err().unwrap());
                 }
-            } else {
-                error!("{:?}", entry.err());
             }
+            Some(images)
+        } else {
+            warn!("{}: {}", path.to_str().unwrap(), directory.err().unwrap());
+            None
         }
-        images
     }
 
     pub fn from_paths<P>(paths: &[P], recurse: bool) -> Result<Self, ImageLoaderError>
@@ -78,32 +98,43 @@ impl ImageLoader {
             let path: PathBuf = PathBuf::from(&path);
 
             if !path.exists() {
-                return Err(ImageLoaderError::InvalidPath(path));
+                warn!("{}", ImageLoaderError::InvalidPath(path));
             } else if path.is_file() {
                 images.push(path);
             } else if path.is_dir() {
-                images.append(&mut Self::find_images(&path, recurse));
+                if let Some(mut i) = Self::find_images(&path, recurse) {
+                    images.append(&mut i);
+                } else {
+                    warn!("No images found in {}", path.to_str().unwrap());
+                }
             } else {
-                return Err(ImageLoaderError::InvalidPath(path));
+                warn!("{}", ImageLoaderError::InvalidPath(path));
             }
         }
 
-        Ok(Self {
-            images,
-            current_image: 0usize,
-        })
+        if images.is_empty() {
+            Err(ImageLoaderError::NoImageFound)
+        } else {
+            Ok(Self {
+                images,
+                current_image: None,
+            })
+        }
     }
 }
 
 impl ImageLoader {
-    fn load_image<P: Into<std::path::PathBuf>>(path: P) -> Result<LoadedImage, ImageLoaderError> {
+    fn load_image<P: Into<std::path::PathBuf> + AsRef<std::ffi::OsStr>>(
+        path: &P,
+    ) -> Result<LoadedImage, ImageLoaderError> {
         use ::image::{gif::GifDecoder, io::Reader, AnimationDecoder, ImageFormat};
 
-        let reader = Reader::open(path.into())?.with_guessed_format()?;
-        let format = reader.format().unwrap();
+        let path: std::path::PathBuf = path.into();
+        let reader = Reader::open(path)?.with_guessed_format()?;
+        let format = reader.format();
 
         match format {
-            ImageFormat::Gif => Ok((
+            Some(ImageFormat::Gif) => Ok((
                 None,
                 Some(
                     GifDecoder::new(reader.into_inner())?
@@ -111,7 +142,39 @@ impl ImageLoader {
                         .collect_frames()?,
                 ),
             )),
-            _ => Ok((Some(reader.decode()?), None)),
+            Some(_) | None => Ok((Some(reader.decode()?), None)),
+        }
+    }
+
+    /// Move the iterator by `dir` amount
+    /// Returns `None` if no more images are available.
+    fn iterate(&mut self, dir: isize) -> Option<Result<LoadedImage, ImageLoaderError>> {
+        let next: usize = self
+            .current_image
+            .and_then(|current| {
+                use std::convert::TryInto;
+                (current as isize).saturating_add(dir).try_into().ok()
+            })
+            .unwrap_or(0);
+
+        if next < self.images.len() {
+            self.current_image = Some(next);
+            info!("Image Index: {}", next);
+            let image_path = self.images.get(next).unwrap();
+            let loadedimage = Self::load_image(&image_path);
+            if let Ok(image) = loadedimage {
+                Some(Ok(image))
+            } else {
+                use std::error::Error;
+                warn!(
+                    "{}: {}",
+                    image_path.to_str().unwrap(),
+                    loadedimage.as_ref().err().unwrap().source().unwrap()
+                );
+                Some(Err(loadedimage.err().unwrap()))
+            }
+        } else {
+            None
         }
     }
 }
@@ -119,14 +182,25 @@ impl ImageLoader {
 impl std::iter::Iterator for ImageLoader {
     type Item = LoadedImage;
 
-    /// Reads the next image into memory
+    /// Reads the next valid image into memory
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(path) = self.images.get(self.current_image) {
-            self.current_image += 1;
-            Some(Self::load_image(path).unwrap())
-        } else {
-            self.current_image = 0;
-            None
+        while let Some(image) = self.iterate(1) {
+            if let Ok(image) = image {
+                return Some(image);
+            }
         }
+        None
+    }
+}
+
+impl std::iter::DoubleEndedIterator for ImageLoader {
+    /// Reads the previous image into memory
+    fn next_back(&mut self) -> Option<Self::Item> {
+        while let Some(image) = self.iterate(-1) {
+            if let Ok(image) = image {
+                return Some(image);
+            }
+        }
+        None
     }
 }
