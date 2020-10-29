@@ -26,14 +26,14 @@ impl Default for Binds {
     fn default() -> Binds {
         Binds {
             binds: vec![
-                (None, Some(VK::Add), Action::ZoomIn),
-                (None, Some(VK::Equals), Action::Reset),
-                (None, Some(VK::H), Action::MoveLeft),
-                (None, Some(VK::J), Action::MoveDown),
-                (None, Some(VK::K), Action::MoveUp),
-                (None, Some(VK::L), Action::MoveRight),
-                (None, Some(VK::Q), Action::Quit),
-                (None, Some(VK::Subtract), Action::ZoomOut),
+                (Some('='), None, Action::Reset),
+                (Some('h'), None, Action::MoveLeft),
+                (Some('j'), None, Action::MoveDown),
+                (Some('k'), None, Action::MoveUp),
+                (Some('l'), None, Action::MoveRight),
+                (Some('q'), None, Action::Quit),
+                (Some('+'), None, Action::ZoomIn),
+                (Some('-'), None, Action::ZoomOut),
                 (Some('f'), None, Action::ToggleFullscreen),
                 (Some('n'), None, Action::NextImage),
                 (Some('p'), None, Action::PrevImage),

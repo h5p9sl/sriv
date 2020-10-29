@@ -58,19 +58,16 @@ impl Window {
     }
 
     pub fn toggle_fullscreen(&mut self) {
-        unimplemented!();
-        /*
         use std::borrow::BorrowMut;
         let glw = &mut self.display.gl_window();
         let wc = glw.borrow_mut().borrow_mut();
         wc.window().set_fullscreen({
-            if let Some(mode) = wc.window().fullscreen() {
+            if wc.window().fullscreen().is_some() {
                 None
             } else {
                 use ::glutin::window::Fullscreen;
                 Some(Fullscreen::Borderless(None))
             }
         });
-        */
     }
 }

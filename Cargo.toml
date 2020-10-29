@@ -15,9 +15,12 @@ version = "0.2.0-alpha"
 [dependencies]
 clap = "2.33"
 colored = "2.0"
-env_logger = "0.7"
-glium = "0.27"
-glutin = "0.24"
-image = "0.23"
+
+env_logger = "0.8"
 log = "0.4"
+
+glium = "0.28"
+glutin = "0.25"
 vek = "0.12"
+
+image = "0.23"
